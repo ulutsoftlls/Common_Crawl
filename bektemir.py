@@ -27,7 +27,7 @@ download_folder = "/home/bektemir/Desktop/my_projects/Common_Crawl/download"
 os.makedirs(download_folder, exist_ok=True)
 
 # Создаем пустой DataFrame для хранения фильтрованных данных
-all_filtered_data = pd.DataFrame()
+
 
 # Чтение ссылок из файла
 with open(file_path, 'r') as file:
@@ -48,22 +48,21 @@ for link in links:
     full_url = f"{base_url}{link}"
 
     # Загрузка файла Parquet
+
     response = requests.get(full_url, stream=True)
 
     if response.status_code == 200:
-        file_path = './parquets/output' + str(i) + '.parquet'
-        # content = response.content  # Ваш код для обработки контента
-        with open(file_path, 'wb') as file:
-            for chunk in response.iter_content(chunk_size=128):
-                file.write(chunk)
+        #file_path = './parquets/output' + str(i) + '.parquet'
+        content = response.content  # Ваш код для обработки контента
         del response
         gc.collect()
-        df = pd.read_parquet(full_url)
+        df = pd.read_parquet(io.BytesIO(content))
+        del content
+        gc.collect()
         filtered_df = df[df['content_languages'].str.startswith('kir', na=False)]
-        all_filtered_data = pd.concat([all_filtered_data, filtered_df], ignore_index=True)
-        print(all_filtered_data)
-        all_filtered_data.to_csv('/home/bektemir/Desktop/my_projects/Common_Crawl/download/all_filtered_data.csv', index=False)
-        del all_filtered_data
+        print(filtered_df)
+        filtered_df.to_csv('/home/bektemir/Desktop/my_projects/Common_Crawl/download/all_filtered_data.csv', index=False)
+        del filtered_df
         del df
         gc.collect()
         print('success')
