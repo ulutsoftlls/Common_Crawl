@@ -1,0 +1,60 @@
+import pandas as pd
+import requests
+import os
+import io
+import pyarrow as pa
+from pyarrow.parquet import ParquetFile
+import gc
+
+def should_write_headers(csv_path):
+    return not os.path.exists(csv_path)
+
+
+def save_to_csv(filtered_df, csv_path, write_headers):
+    if len(filtered_df) > 0:
+        filtered_df.to_csv(csv_path, mode='a', index=False, header=write_headers)
+        del filtered_df
+        gc.collect()
+
+csv_path_for_filtered_data_kir = "/content/drive/MyDrive/Zarina's Workspace/test_kir.csv"
+csv_path_for_filtered_data_other = "/content/drive/MyDrive/Zarina's Workspace/test_other.csv"
+
+
+file_path = "/content/drive/MyDrive/Zarina's Workspace/CC-MAIN-2021-31/cc-index-table.paths 2"
+
+
+with open(file_path, 'r') as file:
+    links = file.read().splitlines()
+
+
+base_url = "https://data.commoncrawl.org/"
+
+for i, link in enumerate(links):
+    if "subset=warc" not in link:
+        continue
+
+    full_url = f"{base_url}{link}"
+    print(f"Processing URL: {full_url}")
+
+    response = requests.get(full_url, stream=True)
+    if response.status_code == 200:
+        content = response.content
+        batch_size = 10000
+        pf = ParquetFile(io.BytesIO(content))
+
+        for batch in pf.iter_batches(batch_size=batch_size):
+            df_batch = pa.Table.from_batches([batch]).to_pandas()
+            if 'content_languages' in df_batch.columns and 'url' in df_batch.columns and 'warc_filename' in df_batch.columns:
+                filtered_df_kir = df_batch[df_batch['content_languages'].str.startswith('kir', na=False) & (df_batch['content_languages'].str.len() == 3)]
+                filtered_df_other = df_batch[df_batch['content_languages'].str.startswith('kir', na=False) & (df_batch['content_languages'].str.len() > 3)]
+                del df_batch
+                gc.collect()
+
+                write_headers_kir = should_write_headers(csv_path_for_filtered_data_kir)
+                write_headers_other = should_write_headers(csv_path_for_filtered_data_other)
+
+                save_to_csv(filtered_df_kir, csv_path_for_filtered_data_kir, write_headers_kir)
+                save_to_csv(filtered_df_other, csv_path_for_filtered_data_other, write_headers_other)
+
+    else:
+        print(f"Failed to download file {full_url}. Status code: {response.status_code}")
